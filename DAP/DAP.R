@@ -3,8 +3,15 @@ library(ggplot2)
 library(lme4)
 GCC <- read.table("GCC data set.txt", header = TRUE) |>
   mutate(month = time*12) |>
-  mutate(d_GCC = GCC - mean(GCC))
-  
+  mutate(month = round(month / 6) * 6) 
+# round up the month
+
+ggplot(GCC) +
+  geom_histogram(aes(x = GCC), binwidth = 6, fill = "salmon", color = "black") +
+  labs(x = "GCC(µm)",
+       y = "Frequency") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust =0.5))
 
 observation_counts <- GCC |>
   group_by(id) |>
@@ -12,47 +19,74 @@ observation_counts <- GCC |>
 
 # (b)
 ggplot(data = GCC, aes(x = month, y = GCC, group = factor(id)))+
-  geom_line() +
-  geom_point() +
+  geom_line(alpha = 0.8) +
+  geom_point(size = 0.8) +
   geom_smooth(aes(group = 1), method = "lm", color = "red", se = FALSE) +
   theme_bw() +
   labs(x = "Month",
-       y = "GCC(µm)",
-       title = 'Profile Plot of GCC Data') +
+       y = "GCC(µm)") +
   theme(plot.title = element_text(hjust =0.5))
 
-# ggplot(data = GCC, aes(x = month, y = GCC, group = factor(id))) +
-#   geom_line() + 
-#   geom_smooth(aes(group = 1), method = "lm", color = "red", se = FALSE) +
-#   theme_bw() +
-#   labs(x = 'Month',
-#        y = 'Residual GCC(µm)',
-#        title = 'Profile Plot of within-subject residuals for the GCC data') +
-#   theme(plot.title = element_text(hjust = 0.5))
-
-summary_stats <- GCC |>
+GCC_residuals <- GCC |>
   group_by(id) |>
-  summarise(
-    mean_GCC = mean(GCC),
-    median_GCC = median(GCC),
-    sd_GCC = sd(GCC)
-  )
+  dplyr::mutate(mean_GCC = mean(GCC), 
+                d_GCC = GCC - mean_GCC)
 
-ggplot(summary_stats, aes(x = "", y = mean_GCC)) +
-  geom_violin(fill = "lightblue", color = "black") +
-  geom_jitter(width = 0.1, color = "darkblue", alpha = 0.7) +
-  labs(title = "Violin Plot of Mean GCC",
-       x = "",
-       y = "Mean GCC (µm)") +
-  theme_minimal()
+ggplot(data = GCC_residuals, aes(x = month, y = d_GCC, group = factor(id))) +
+  geom_line(alpha = 0.6) +
+  geom_smooth(aes(group = 1), method = "lm", color = "red", se = FALSE) +
+  theme_bw() +
+  labs(x = 'Month',
+       y = 'Residual GCC(µm)') +
+  theme(plot.title = element_text(hjust = 0.5))
 
+
+sum_stat = summarySE(GCC, 
+                     measurevar = 'GCC',
+                     groupvars = c('month'))
+
+ggplot(sum_stat, aes(x = month, y = GCC)) +
+  geom_line(color = "salmon") + 
+  geom_errorbar(aes(ymin = GCC - 2 * se,
+                    ymax = GCC + 2 * se), color = "salmon") +
+  theme_bw() +
+  labs(x = "Month", y = "GCC(µm)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# ggplot(data = GCC)+
+#   geom_boxplot(aes(x= month, group = month, y = GCC)) +
+#   theme_bw() +
+#   labs(x = "Days",
+#        y = "Weight(cg)",
+#        title = 'Boxplots of weights by day of BIG MICE Data') +
+#   theme(plot.title = element_text(hjust =0.5))
+# 
+# ggplot(summary_stats, aes(x = "", y = mean_GCC)) +
+#   geom_violin(fill = "lightblue", color = "black") +
+#   geom_jitter(width = 0.1, color = "darkblue", alpha = 0.7) +
+#   labs(title = "Violin Plot of Mean GCC",
+#        x = "",
+#        y = "Mean GCC (µm)") +
+#   theme_minimal()
+
+sum_stat1 = summarySE(GCC_residuals, 
+                     measurevar = 'd_GCC',
+                     groupvars = c('month'))
+
+ggplot(sum_stat1, aes(x = month, y = d_GCC)) +
+  geom_line(color = "salmon") + 
+  geom_errorbar(aes(ymin = d_GCC - 2 * se,
+                    ymax = d_GCC + 2 * se), color = "salmon") +
+  theme_bw() +
+  labs(x = "Month", y = "Residual GCC(µm)") +
+  theme(plot.title = element_text(hjust = 0.5))
 
 # (c)
-model_RI <- lmer(GCC ~ month + (1 | id), data = GCC)
-model_RS <- lmer(GCC ~ month + (0 + month | id), data = GCC)
-model_RR <- lmer(GCC ~ month + (1 + month | id), data = GCC) # win
-model_RIASQ <- lmer(GCC ~ month + (1 + month + I(month^2) | id), data = GCC)
-anova(model_RI, model_RS, model_RR, model_RIASQ)
+model_RI <- lmer(GCC ~ month + I(month^2) + (1 | id), data = GCC)
+model_RS <- lmer(GCC ~ month + I(month^2) + (0 + month | id), data = GCC)
+model_RIAS <- lmer(GCC ~ month + I(month^2) + (1 + month | id), data = GCC) # win
+model_RIASQ <- lmer(GCC ~ month + I(month^2) + (1 + month + I(month^2) | id), data = GCC)
+anova(model_RI, model_RS, model_RIAS, model_RIASQ)
 library(nlme)
 
 
@@ -120,4 +154,23 @@ ggplot(slopes_per_id, aes(x = initial_GCC, y = slope)) +
 
 
 # Q2
+age_model <- lmer(GCC ~ month + base_age + (1 + month | id), data = GCC)
+age_model_interaction <- lmer(GCC ~ month * base_age + (1 + month | id), data = GCC)
+age_model_interaction2 <- lmer(GCC ~ month * base_age + month * I(base_age^2) + (1 + month | id), data = GCC)
+anova(age_model, age_model_interaction, age_model_interaction2)
+
+ggplot(GCC, aes(x = month, y = GCC, group = factor(id))) +
+  geom_point(alpha = 0.6) +
+  geom_line(aes(y = fitted(age_model_interaction)), color = "salmon") +
+  labs(title = "Observed vs. Fitted Values with Age Effect",
+       x = "Time (years)",
+       y = "GCC Thickness (µm)") +
+  theme_minimal()
+library(interactions)
+interact_plot(age_model_interaction, pred = base_age, modx = month,
+              plot.points = TRUE)
+plot(age_model_interaction)
+residuals_age_model <- resid(age_model_interaction)
+qqnorm(residuals_age_model, main = "Q-Q Plot of Residuals for Age Interaction Model")
+
 

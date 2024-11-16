@@ -7,7 +7,7 @@ library(lme4)
 model_null <- lmer(distance ~ age + (1 | id), data = dental)
 model_best <- lmer(distance ~ gender * age + (1 | id), data = dental)
 RI_f <- lmer(distance ~ gender*age + gender * I(age^2) + (age | id), data = dental)
-anova(RI_f, model_best)
+anova(RI_f, model_best, test = "F")
 
 RI_d <- lmer(distance ~ gender*age + (1 | id), data = dental)
 new_data <- dental |>
