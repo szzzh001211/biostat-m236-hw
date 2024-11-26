@@ -1,77 +1,117 @@
 library(tidyverse)
 library(ggplot2)
 library(lme4)
-# Repeated CD4 counts data from AIDS clinical trial.
-# 
-# Source: AIDS Clinical Trial Group 193A Study. 
-# Data courtesy of Dr. Keith Henry.
-# 
-# Reference: Henry, K., Erice, A., Tierney, C., Balfour, H.H. Jr, Fischl, M.A.,
-# Kmack, A., Liou, S.H., Kenton, A., Hirsch, M.S., Phair, J., Martinez, A. 
-# and Kahn J.O. for the AIDS Clinical Trial Group 193A Study Team (1998). 
-# A randomized, controlled, double-blind study comparing the survival benefit of 
-# four different reverse transcriptase inhibitor therapies (three-drug, two-drug, 
-# and alternating drug) for the treatment of advanced AIDS. Journal of Acquired 
-# Immune Deficiency Syndromes and Human Retrovirology, 19, 339-349.
-# 
-# 
-# Description:
-#   
-# The data are from a randomized, double-blind, study of AIDS patients with 
-# advanced immune suppression (CD4 counts of less than or equal to 50 cells/mm^3).
-# Patients in AIDS Clinical Trial Group (ACTG) Study 193A were randomized to 
-# dual or triple combinations of HIV-1 reverse transcriptase inhibitors. 
-# Specifically, patients were randomized to one of four daily regimens containing
-# 600mg of zidovudine: zidovudine alternating monthly with 400mg didanosine;
-# zidovudine plus 2.25mg of zalcitabine; zidovudine plus 400mg of didanosine; 
-# or zidovudine plus 400mg of didanosine plus 400mg of nevirapine (triple therapy). 
-# Measurements of CD4 counts were scheduled to be collected at baseline and at 
-# 8-week intervals during follow-up. However, the CD4 count data are unbalanced 
-# due to mistimed measurements and missing data that resulted from skipped visits
-# and dropout. The number of measurements of CD4 counts during the first 40 
-# weeks of follow-up varied from 1 to 9, with a median of 4. 
+library(Rmisc)
+ADQS_raw <- read_csv("ADQS.csv")
+ADQS_PACC <- ADQS_raw %>%
+  filter(MITTFL== 1) %>%
+  filter(EPOCH == "BLINDED TREATMENT" | AVISIT == "006") %>%
+  filter(QSTESTCD == "PACC") %>%
+  rename(PACC = QSSTRESN) %>%
+  select(BID, ASEQNCS, TX, ADURW, TX, AGEYR,
+         AAPOEGNPRSNFLG, EDCCNTU, SUVRCER, PACC) %>%
+  mutate(TX = factor(TX, levels = c("Placebo", "Solanezumab"))) %>%
+  na.omit()
 
-# The response variable is the log transformed CD4 counts, log(CD4 counts + 1), 
-# available on 1309 patients.
+ADQS_PACC <- ADQS_PACC |>
+  rename(weeks = ADURW, treatment = TX) |>
+  rename(id = BID) |>
+  mutate(facweek = round(weeks / 24) * 24)
 
-# The categorical variable Treatment is coded 1 = zidovudine alternating monthly 
-# with 400mg didanosine, 2 = zidovudine plus 2.25mg of zalcitabine, 3 = zidovudine
-# plus 400mg of didanosine, and 4 = zidovudine plus 400mg of didanosine plus 
-# 400mg of nevirapine. The variable Week represents time since baseline (in weeks).
-# Variable List: Subject ID, Treatment, Age (years), Gender (1=M, 0=F), Week, log(CD4 count + 1).
+ggplot(ADQS_PACC) +
+  geom_histogram(aes(x = PACC, fill = treatment), binwidth = 6, color = "black") +
+  labs(x = "PACC Score",
+       y = "Frequency") +
+  theme_bw() +
+  theme(legend.position = "inside", legend.position.inside = c(0.2, 0.2)) +
+  theme(plot.title = element_text(hjust =0.5))
+
+ggplot(data = ADQS_PACC, aes(x = facweek, y = PACC, color = treatment,
+                             group = factor(id))) +
+  geom_line(alpha = 0.6) +
+  geom_point(size = 0.6) +
+  geom_smooth(aes(color = treatment, group = treatment), method = "lm", se = FALSE) +
+  scale_x_continuous(breaks = seq(0, max(ADQS_PACC$facweek), by = 24)) + 
+  theme_bw() +
+  labs(x = "Weeks",
+       y = "PACC Score") +
+  theme(legend.position = "inside", legend.position.inside = c(0.2, 0.2)) +
+  theme(plot.title = element_text(hjust =0.5))
 
 
-cd4 <- read.table("cd4-data.txt", header = FALSE)
 
-colnames(cd4) <- c("id", "treatment", "age", "gender", "week", "counts")
-
-observation_counts <- cd4 |>
-  group_by(treatment) |>
-  summarise(percentage = n_distinct(id))
-
-treatment_1_count <- cd4 |>
-  filter(treatment == 1) |>
-  summarise(patient_count = n_distinct(id))
-
-model <- glmer(response ~ treatment + month + visit+ treatment:month + (1|id), 
-               data = toenail, family = binomial)
-
-mean_response <- toenail |>
+PACC_residuals <- ADQS_PACC |>
   group_by(id) |>
-  summarise(mean_response = mean(response))
+  dplyr::mutate(mean_PACC = mean(PACC), 
+                d_PACC = PACC - mean_PACC)
 
-ggplot(mean_response, aes(x = mean_response)) +
-  geom_histogram(binwidth = 0.1, fill = "skyblue", color = "black") +
-  labs(
-    title = "Histogram of Mean Response per Subject",
-    x = "Mean Response",
-    y = "Frequency"
-  ) +
-  theme_minimal()
+ggplot(data = PACC_residuals, aes(x = facweek, y = d_PACC, color = treatment, 
+                                  group = factor(id))) +
+  geom_line(alpha = 0.6) +
+  geom_point(size = 0.6) +
+  geom_smooth(aes(color = treatment, group = treatment), method = "lm", se = FALSE) +
+  scale_x_continuous(breaks = seq(0, max(ADQS_PACC$facweek), by = 24)) + 
+  theme_bw() +
+  labs(x = 'Weeks',
+       y = 'Residual PACC Score') +
+  theme(legend.position = "inside", legend.position.inside = c(0.2, 0.2)) +
+  theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(toenail, aes(x = month, y = length, group = id, color = treatment)) + 
-  geom_line() +
-  facet_wrap(~treatment) +
-  labs(x = "Month", y = "Length (mm)")
+
+sum_stat = summarySE(ADQS_PACC, 
+                     measurevar = 'PACC',
+                     groupvars = c('facweek', 'treatment'))
+
+ggplot(sum_stat, aes(x = facweek, y = PACC, color = treatment, group = treatment)) + 
+  geom_line() + 
+  geom_errorbar(aes(ymin = PACC - 2 * se,
+                    ymax = PACC + 2 * se)) +
+  theme_bw() +
+  labs(x = "Weeks", y = "PACC Score") +
+  theme(legend.position = "inside", legend.position.inside = c(0.2, 0.2)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+sum_stat1 = summarySE(PACC_residuals, 
+                      measurevar = 'd_PACC',
+                      groupvars = c('facweek', 'treatment'))
+
+ggplot(sum_stat1, aes(x = facweek, y = d_PACC, color = treatment, group = treatment)) +
+  geom_line() + 
+  geom_errorbar(aes(ymin = d_PACC - 2 * se,
+                    ymax = d_PACC + 2 * se)) +
+  theme_bw() +
+  labs(x = "Weeks", y = "Residual PACC Score") +
+  theme(legend.position = "inside", legend.position.inside = c(0.2, 0.2)) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# observation_counts <- ADQS_PACC |>
+#   group_by(AAPOEGNPRSNFLG) |>
+#   summarise(count = n_distinct(BID))
+# 
+# treatment_1_count <- cd4 |>
+#   filter(treatment == 1) |>
+#   summarise(patient_count = n_distinct(id))
+# 
+# model <- glmer(response ~ treatment + month + visit+ treatment:month + (1|id), 
+#                data = toenail, family = binomial)
+# 
+# mean_response <- toenail |>
+#   group_by(id) |>
+#   summarise(mean_response = mean(response))
+# 
+# ggplot(mean_response, aes(x = mean_response)) +
+#   geom_histogram(binwidth = 0.1, fill = "skyblue", color = "black") +
+#   labs(
+#     title = "Histogram of Mean Response per Subject",
+#     x = "Mean Response",
+#     y = "Frequency"
+#   ) +
+#   theme_minimal()
+# 
+# ggplot(toenail, aes(x = month, y = length, group = id, color = treatment)) + 
+#   geom_line() +
+#   facet_wrap(~treatment) +
+#   labs(x = "Month", y = "Length (mm)")
 
 
