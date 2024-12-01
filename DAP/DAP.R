@@ -251,12 +251,13 @@ ggplot(slopes_per_id, aes(x = initial_GCC, y = slope)) +
 # title = "Relationship Between Initial GCC and Slope of GCC Change",
 
 # Q2
+model_no_age <- lmer(GCC ~ month + (1 + month | id), data = GCC)
 model_age <- lmer(GCC ~ month + base_age + (1 + month | id), data = GCC)
-model_age_quar <- lme(GCC ~ month + base_age + I(base_age^2), random =  ~month | id, data = GCC)
+model_age_quar <- lmer(GCC ~ month + base_age + I(base_age^2) + (1 + month | id), data = GCC)
 model_age_interaction <- lmer(GCC ~ month * base_age + (1 + month | id), data = GCC)
 model_age_quar_interaction <- lmer(GCC ~ month * base_age + month*I(base_age^2) 
                                    + (1 + month | id), data = GCC)
-anova(model_age, model_age_quar, model_age_interaction, model_age_quar_interaction)
+anova(model_no_age, model_age, model_age_quar, model_age_interaction, model_age_quar_interaction)
 
 
 
